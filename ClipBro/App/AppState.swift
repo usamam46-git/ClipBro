@@ -18,6 +18,7 @@ final class AppState: ObservableObject {
     @Published var selectedID: UUID?
     @Published var hotkeyError = ""
     let monitor = ClipboardMonitor()
+    let ai = AIViewModel()
     private let persistence = HistoryPersistence.standard
     private let diskQueue = DispatchQueue(label: "com.usamam46.ClipBro.storage", qos: .utility)
     private var storageReadable = true
@@ -74,6 +75,16 @@ final class AppState: ObservableObject {
         history.insert(recent, limit: preferences.historyLimit); persist()
         message = "Copied to clipboard"
         if activate && preferences.pasteOnActivate { paste() }
+    }
+    func replacePreservingOriginal(_ id: UUID, text: String) {
+        guard let index = history.items.firstIndex(where: { $0.id == id }) else { message = "Original clip is no longer available."; return }
+        if !history.items[index].pinned {
+            guard history.setPinned(id, pinned: true, pinLimit: preferences.pinLimit, historyLimit: preferences.historyLimit) else {
+                message = "Free a pin slot to preserve the original, or save the result as a new clip."; return
+            }
+        }
+        add(ClipItem(text: text, kind: Classifier.classify(text), generated: true))
+        message = "Result saved; the original is pinned for recovery."
     }
     func activate(_ item: ClipItem, plain: Bool = false) { copy(item, plain: plain, activate: true) }
 }

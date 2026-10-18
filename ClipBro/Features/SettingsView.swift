@@ -12,6 +12,7 @@ struct SettingsView: View {
             general.tabItem { Label("General", systemImage: "gearshape") }
             clipboard.tabItem { Label("Clipboard", systemImage: "clipboard") }
             shortcuts.tabItem { Label("Shortcuts", systemImage: "keyboard") }
+            AISettingsView(state: state).tabItem { Label("AI", systemImage: "sparkles") }
             privacy.tabItem { Label("Privacy", systemImage: "hand.raised") }
         }.padding().frame(width: 620, height: 620).tint(Design.gold)
         .preferredColorScheme(state.preferences.theme == "Dark" ? .dark : state.preferences.theme == "Light" ? .light : nil)

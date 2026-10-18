@@ -15,14 +15,15 @@ struct LauncherView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Search clips, emojis, snippets…", text: $search)
                     .textFieldStyle(.plain).focused($searchFocused)
-                    .onSubmit { if state.tab == "Emoji" { NotificationCenter.default.post(name: .emojiActivate, object: nil) } else if let selected { state.activate(selected) } }
+                    .onSubmit { if state.tab == "Emoji" { NotificationCenter.default.post(name: .emojiActivate, object: nil) } else if state.tab == "History", let selected { state.activate(selected) } }
                 if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain) }
             }.padding(12).background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: Design.rowRadius))
             Picker("View", selection: $state.tab) {
                 Text("History").tag("History")
                 Text("Emoji").tag("Emoji")
+                Text("AI").tag("AI")
             }.pickerStyle(.segmented)
-            if state.tab == "Emoji" { EmojiPicker(state: state, search: search) } else { historyView }
+            if state.tab == "Emoji" { EmojiPicker(state: state, search: search) } else if state.tab == "AI" { AIView(state: state, model: state.ai) } else { historyView }
             if !state.message.isEmpty {
                 HStack {
                     Text(state.message).font(.caption).foregroundStyle(.secondary)
@@ -101,6 +102,7 @@ struct LauncherView: View {
                                         Button("Copy as plain text") { state.copy(item, plain: true) }
                                         Button("Activate") { state.activate(item) }
                                         Button(item.pinned ? "Unpin" : "Pin") { state.pin(item) }
+                                        Button("Transform with AI…") { state.selectedID = item.id; state.ai.input = item.text; state.ai.sourceID = item.id; state.tab = "AI" }
                                         Button("View full content / edit title") { detail = item }
                                         Divider()
                                         Button("Delete", role: .destructive) { state.delete(item) }
@@ -115,7 +117,7 @@ struct LauncherView: View {
     }
     private func move(_ delta: Int) {
         if state.tab == "Emoji" { NotificationCenter.default.post(name: .emojiMove, object: delta * 8); return }
-        guard !results.isEmpty else { return }
+        guard state.tab == "History", !results.isEmpty else { return }
         let index = results.firstIndex { $0.id == selected?.id } ?? 0
         state.selectedID = results[min(max(0, index + delta), results.count - 1)].id
     }
