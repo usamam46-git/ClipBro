@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var outsideMonitor: Any?
     private var previousApplication: NSRunningApplication?
     let state = AppState()
+    private let hotkey = HotkeyService()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         state.openSettings = { [weak self] in self?.showSettings() }
@@ -40,15 +41,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.contentView = NSHostingView(rootView: LauncherView(state: state))
         panel.onEscape = { [weak self] in self?.hidePanel() }
         state.dismiss = { [weak self] in self?.hidePanel() }
+        state.paste = { [weak self] in
+            guard let self else { return }
+            let destination = self.previousApplication
+            self.hidePanel()
+            Task { @MainActor in
+                if let message = await PasteService.paste(to: destination) {
+                    self.state.message = message
+                    self.showPanel()
+                }
+            }
+        }
+        hotkey.action = { [weak self] in self?.togglePanel() }
+        registerHotkey()
+        state.preferencesChanged = { [weak self] old in
+            guard let self else { return }
+            if old.hotkeyCode != self.state.preferences.hotkeyCode || old.hotkeyModifiers != self.state.preferences.hotkeyModifiers { self.registerHotkey() }
+        }
+        state.monitor.start()
         if state.preferences.showOnLaunch { showPanel() }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        state.monitor.stop(); state.flush(); hotkey.stop()
+    }
+    private func registerHotkey() {
+        state.hotkeyError = hotkey.register(code: state.preferences.hotkeyCode, modifiers: state.preferences.hotkeyModifiers) ? "" : "Shortcut unavailable. The previous shortcut remains active; choose another."
+    }
     @objc private func statusClicked() {
         if NSApp.currentEvent?.type == .rightMouseUp { showMenu() }
         else { togglePanel() }
     }
     func togglePanel() { panel.isVisible ? hidePanel() : showPanel() }
     func showPanel() {
+        if panel.isVisible { return }
         if NSWorkspace.shared.frontmostApplication?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
             previousApplication = NSWorkspace.shared.frontmostApplication
         }

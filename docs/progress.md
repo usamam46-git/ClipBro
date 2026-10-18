@@ -6,3 +6,7 @@
 | Native foundation | Compiled | scripts/build.sh exit 0; plutil validates project | see foundation commit | pending | GUI pending; macOS 26.5 SDK fallback |
 
 All interactive features require separate manual validation; compilation is not proof of GUI behavior.
+| Foundation push | Complete | git push exit 0 | 477dedf | pushed | Native app compiled, GUI not yet tested |
+| History / search / pins / management | Implemented | 26 deterministic checks; app build exit 0 | see history commit | pending | 350 ms polling can miss faster transient changes; 1 MB text cap |
+| Shortcut / paste / settings | Implemented | App compile | see history commit | pending | Host GUI and destination insertion pending; Accessibility required for paste |
+| Emoji | Implemented | App compile; Unicode core test | see history commit | pending | Curated subset, not full Unicode inventory |
