@@ -34,6 +34,7 @@ struct SettingsView: View {
                 Picker("Default tab", selection: $state.preferences.defaultTab) { Text("History").tag("History"); Text("Emoji").tag("Emoji") }
             }
             Section("Appearance") {
+                Toggle("Subtle hover animations", isOn: $state.preferences.animations)
                 Picker("Theme", selection: $state.preferences.theme) { ForEach(["System", "Light", "Dark"], id: \.self) { Text($0) } }
                 Text("The menu-bar icon stays visible so Settings and Quit are always reachable.").font(.caption).foregroundStyle(.secondary)
             }

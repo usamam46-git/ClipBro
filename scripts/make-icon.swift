@@ -1,0 +1,20 @@
+import AppKit
+let size = 1024
+let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+let bg = NSBezierPath(roundedRect: NSRect(x: 62, y: 62, width: 900, height: 900), xRadius: 205, yRadius: 205)
+NSGradient(starting: NSColor(calibratedRed: 0.21, green: 0.25, blue: 0.29, alpha: 1), ending: NSColor(calibratedRed: 0.07, green: 0.09, blue: 0.12, alpha: 1))!.draw(in: bg, angle: -90)
+let board = NSBezierPath(roundedRect: NSRect(x: 280, y: 225, width: 464, height: 585), xRadius: 65, yRadius: 65)
+NSGradient(starting: NSColor(calibratedRed: 0.94, green: 0.84, blue: 0.64, alpha: 1), ending: NSColor(calibratedRed: 0.69, green: 0.51, blue: 0.27, alpha: 1))!.draw(in: board, angle: -90)
+NSColor(calibratedRed: 0.16, green: 0.19, blue: 0.22, alpha: 1).setFill()
+NSBezierPath(roundedRect: NSRect(x: 398, y: 755, width: 228, height: 105), xRadius: 35, yRadius: 35).fill()
+NSBezierPath(ovalIn: NSRect(x: 386, y: 510, width: 45, height: 45)).fill()
+NSBezierPath(ovalIn: NSRect(x: 593, y: 510, width: 45, height: 45)).fill()
+let smile = NSBezierPath()
+smile.move(to: NSPoint(x: 405, y: 430))
+smile.curve(to: NSPoint(x: 619, y: 430), controlPoint1: NSPoint(x: 455, y: 345), controlPoint2: NSPoint(x: 569, y: 345))
+NSColor(calibratedRed: 0.16, green: 0.19, blue: 0.22, alpha: 1).setStroke()
+smile.lineWidth = 25; smile.lineCapStyle = .round; smile.stroke()
+NSGraphicsContext.restoreGraphicsState()
+try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "build/icon-1024.png"))

@@ -47,6 +47,9 @@ struct EmojiPicker: View {
         .onReceive(NotificationCenter.default.publisher(for: .emojiActivate)) { _ in
             if results.indices.contains(selection) { use(results[selection]) }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .emojiCopy)) { _ in
+            if results.indices.contains(selection) { state.copy(ClipItem(text: results[selection].symbol, kind: .text)) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .emojiMove)) { note in move(note.object as? Int ?? 0) }
     }
     private func move(_ offset: Int) { selection = min(max(0, selection + offset), max(0, results.count - 1)) }

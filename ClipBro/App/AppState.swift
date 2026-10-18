@@ -6,6 +6,8 @@ final class AppState: ObservableObject {
     @Published var preferences = Preferences.load() {
         didSet {
             preferences.save()
+            if oldValue.aiEnabled && !preferences.aiEnabled { ai.reset() }
+            if oldValue.persistence && !preferences.persistence { storageReadable = true }
             history.enforceLimit(preferences.historyLimit)
             _ = history.enforceStorage(imageLimit: preferences.imageLimitMB * 1024 * 1024)
             persist()
@@ -31,7 +33,7 @@ final class AppState: ObservableObject {
         if ProcessInfo.processInfo.arguments.contains("--ui-smoke-test") { return }
         tab = preferences.defaultTab
         if preferences.persistence {
-            do { history = try persistence.load(); history.enforceLimit(preferences.historyLimit) }
+            do { history = try persistence.load(); history.enforceLimit(preferences.historyLimit); _ = history.enforceStorage(imageLimit: preferences.imageLimitMB * 1024 * 1024) }
             catch { storageReadable = false; message = "History could not be read. The existing file has been preserved. Clear all history to reset." }
         }
         monitor.preferences = { [weak self] in self?.preferences ?? Preferences() }

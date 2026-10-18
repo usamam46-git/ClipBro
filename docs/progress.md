@@ -1,17 +1,24 @@
-# Progress
+# ClipBro progress
 
-| Feature | Status | Verification | Commit | Push | Limitations |
+| Feature | Status | Verification method | Commit | Push | Known limitations |
 |---|---|---|---|---|---|
-| Environment | Audited | macOS 27.0.1 arm64, Swift 6.4; empty correct origin | pending | pending | Full Xcode absent; xcodebuild unavailable |
-| Native foundation | Compiled | scripts/build.sh exit 0; plutil validates project | see foundation commit | pending | GUI pending; macOS 26.5 SDK fallback |
+| Environment and native foundation | Implemented | Swift build exit 0; plist validation; real app launch | 477dedf | pushed | Full Xcode absent |
+| Clipboard history, dedup, pins, search, management | Implemented | Core tests and named-pasteboard integration | eff621a | pushed | Polling can miss changes faster than 350 ms; bounded content |
+| Global shortcut, paste handling, native settings | Implemented | Registration + visible/key panel smoke checks; internal arrow event passed | eff621a | pushed | Cross-app insertion pending permission/testing; app-local conflicts possible |
+| Emoji picker | Implemented | Compile, Unicode roundtrip, dataset uniqueness/search | eff621a | pushed | Curated subset; favorites UI not manually exercised |
+| AI transformations and Keychain | Implemented | 12 mocked HTTP checks; compile | 5902084 | pushed | Live API and actual credential storage require user-entered key |
+| Images, files, RTF and local OCR | Implemented | 32 core checks + 12 real native integration checks | bc76740 | pushed | Image/file caps; file URLs can expire; RTF not all source formats |
+| Keyboard reliability, custom icons and appearance | Verified local build | Light/dark screenshots inspected; panel key and arrow movement true | current polish commit | pending | Multi-display and comprehensive GUI acceptance pending |
+| Privacy and accessibility preferences | Implemented | Safeguard tests; AppKit permission check | current polish commit | pending | Secret heuristic imperfect; user granting Accessibility |
+| Packaging | Complete | codesign verification exit 0; DMG and ZIP generated | current polish commit | pending | Ad-hoc signed, not notarized |
+| REA investigation | Blocked, documented | Actual CLI doctor: registration missing; no MCP tools | 477dedf | pushed | No reference-app observations or decompilation evidence |
+| Xcode build | Blocked | Actual xcodebuild invocation exits 1: full Xcode required | — | — | Xcode project is plist-valid; compiler fallback succeeds |
+| Sync and import/export | Deferred | No implementation claimed | — | — | Optional scope; no backend enabled |
 
-All interactive features require separate manual validation; compilation is not proof of GUI behavior.
-| Foundation push | Complete | git push exit 0 | 477dedf | pushed | Native app compiled, GUI not yet tested |
-| History / search / pins / management | Implemented | 26 deterministic checks; app build exit 0 | see history commit | pending | 350 ms polling can miss faster transient changes; 1 MB text cap |
-| Shortcut / paste / settings | Implemented | App compile | see history commit | pending | Host GUI and destination insertion pending; Accessibility required for paste |
-| Emoji | Implemented | App compile; Unicode core test | see history commit | pending | Curated subset, not full Unicode inventory |
-| History milestone push | Complete | git push exit 0; launched process remains running | eff621a | pushed | Launch is a smoke check, not interactive acceptance |
-| AI actions / Keychain | Implemented | App build exit 0; mocked HTTP checks | see AI commit | pending | Valid key, Keychain prompts and live API call require user testing |
-| AI milestone push | Complete | git push exit 0 | 5902084 | pushed | Live API call not attempted |
-| Images / files / RTF / OCR | Implemented | 32 core + 12 AI checks; 12 native integration checks passed | see media commit | pending | Bounded images, file references may become inaccessible; RTF only |
-| Panel runtime smoke | Passed | Synthetic NSPanel visible/key; hotkey registration no error; captured own-view rendering | see media commit | pending | Accessibility false; cross-app paste not tested |
+## Test totals
+- 32 deterministic core checks passed.
+- 12 AI checks passed with URLProtocol mock; zero live API requests.
+- 12 native integration checks passed outside the restricted sandbox, using a private pasteboard and synthetic OCR image.
+- Light/dark runtime smoke reports: panelVisible=true, panelKey=true, arrowNavigated=true, no hotkey registration error.
+
+See [testing.md](testing.md) for the acceptance ledger and remaining interactive checks. Build artifacts and synthetic screenshots remain ignored under build/. No API key, clipboard history or user settings are committed.

@@ -5,6 +5,8 @@ import SwiftUI
 struct ClipBroApp {
     static func main() {
         let app = NSApplication.shared
+        if ProcessInfo.processInfo.arguments.contains("--light") { app.appearance = NSAppearance(named: .aqua) }
+        if ProcessInfo.processInfo.arguments.contains("--dark") { app.appearance = NSAppearance(named: .darkAqua) }
         let delegate = AppDelegate()
         app.delegate = delegate
         app.setActivationPolicy(.accessory)
@@ -18,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var panel: LauncherPanel!
     private var settingsWindow: NSWindow?
     private var outsideMonitor: Any?
+    private var keyboardMonitor: Any?
     private var previousApplication: NSRunningApplication?
     let state = AppState()
     private let hotkey = HotkeyService()
@@ -25,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         state.openSettings = { [weak self] in self?.showSettings() }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "clipboard.fill", accessibilityDescription: "ClipBro")
+        statusItem.button?.image = MenuBarIcon.make()
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -58,6 +61,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self else { return }
             if old.hotkeyCode != self.state.preferences.hotkeyCode || old.hotkeyModifiers != self.state.preferences.hotkeyModifiers { self.registerHotkey() }
         }
+        keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.panel.isKeyWindow, self.panel.attachedSheet == nil else { return event }
+            if event.keyCode == 53 { self.hidePanel(); return nil }
+            let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+            if modifiers == .command && event.charactersIgnoringModifiers == "f" {
+                self.state.focusSearch = UUID(); return nil
+            }
+            if self.state.tab == "AI" { return event }
+            if modifiers == .command && event.charactersIgnoringModifiers == "c" {
+                if let editor = self.panel.firstResponder as? NSTextView, editor.selectedRange().length > 0 { return event }
+                NotificationCenter.default.post(name: .copySelectedClip, object: nil); return nil
+            }
+            guard modifiers.isEmpty else { return event }
+            if event.keyCode == 36 || event.keyCode == 76 {
+                NotificationCenter.default.post(name: self.state.tab == "Emoji" ? .emojiActivate : .activateSelectedClip, object: nil); return nil
+            }
+            if event.keyCode == 125 || event.keyCode == 126 {
+                let delta = event.keyCode == 125 ? 1 : -1
+                NotificationCenter.default.post(name: self.state.tab == "Emoji" ? .emojiMove : .historyMove, object: self.state.tab == "Emoji" ? delta * 8 : delta); return nil
+            }
+            if self.state.tab == "Emoji" && (event.keyCode == 123 || event.keyCode == 124) {
+                NotificationCenter.default.post(name: .emojiMove, object: event.keyCode == 124 ? 1 : -1); return nil
+            }
+            return event
+        }
         if ProcessInfo.processInfo.arguments.contains("--ui-smoke-test") {
             state.history.items = [
                 ClipItem(text: "SELECT name, created_at FROM projects ORDER BY created_at DESC;", kind: .sql, pinned: true, title: "Project activity query"),
@@ -66,7 +94,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 ClipItem(text: "func greet() { print(\"Hello\") }", kind: .code),
                 ClipItem(text: "👩🏽‍💻 A good day to build something useful.", kind: .text)
             ]
+            state.selectedID = state.history.items.first?.id
+            if ProcessInfo.processInfo.arguments.contains("--emoji") { state.tab = "Emoji" }
+            if ProcessInfo.processInfo.arguments.contains("--ai") { state.tab = "AI" }
             showPanel()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self else { return }
+                if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.function, .numericPad], timestamp: 0, windowNumber: self.panel.windowNumber, context: nil, characters: "\u{F701}", charactersIgnoringModifiers: "\u{F701}", isARepeat: false, keyCode: 125) {
+                    NSApp.postEvent(event, atStart: false)
+                }
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.finishSmokeTest() }
             return
         }
@@ -83,12 +120,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 try? png.write(to: URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("build/ui-preview.png"))
             }
         }
-        let report = "panelVisible=\(panel.isVisible)\npanelKey=\(panel.isKeyWindow)\naccessibilityTrusted=\(PasteService.permitted)\nhotkeyError=\(state.hotkeyError)\n"
+        let navigated = state.selectedID == state.history.items.dropFirst().first?.id
+        let report = "arrowNavigated=\(navigated)\npanelVisible=\(panel.isVisible)\npanelKey=\(panel.isKeyWindow)\naccessibilityTrusted=\(PasteService.permitted)\nhotkeyError=\(state.hotkeyError)\n"
         try? report.write(to: URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("build/ui-smoke.txt"), atomically: true, encoding: .utf8)
         NSApp.terminate(nil)
     }
     func applicationWillTerminate(_ notification: Notification) {
         state.monitor.stop(); state.flush(); hotkey.stop()
+        if let keyboardMonitor { NSEvent.removeMonitor(keyboardMonitor) }
     }
     private func registerHotkey() {
         state.hotkeyError = hotkey.register(code: state.preferences.hotkeyCode, modifiers: state.preferences.hotkeyModifiers) ? "" : "Shortcut unavailable. The previous shortcut remains active; choose another."

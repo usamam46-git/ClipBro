@@ -6,6 +6,8 @@ struct LauncherView: View {
     @State private var detail: ClipItem?
     @State private var clearAll = false
     @FocusState private var searchFocused: Bool
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
     var results: [ClipItem] { state.history.ordered.filter { $0.matches(search) } }
     var selected: ClipItem? { results.first { $0.id == state.selectedID } ?? results.first }
     var body: some View {
@@ -22,7 +24,7 @@ struct LauncherView: View {
                 Text("History").tag("History")
                 Text("Emoji").tag("Emoji")
                 Text("AI").tag("AI")
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.segmented).labelsHidden()
             if state.tab == "Emoji" { EmojiPicker(state: state, search: search) } else if state.tab == "AI" { AIView(state: state, model: state.ai) } else { historyView }
             if !state.message.isEmpty {
                 HStack {
@@ -39,7 +41,7 @@ struct LauncherView: View {
             }.font(.caption2).foregroundStyle(.secondary)
         }.padding(Design.inset)
         .frame(width: Design.panelWidth, height: Design.panelHeight)
-        .background(GlassBackground())
+        .background { if reduceTransparency || contrast == .increased { Color(nsColor: .windowBackgroundColor) } else { GlassBackground() } }
         .clipShape(RoundedRectangle(cornerRadius: Design.radius))
         .overlay(RoundedRectangle(cornerRadius: Design.radius).strokeBorder(.primary.opacity(0.08)))
         .tint(Design.gold)
@@ -48,11 +50,11 @@ struct LauncherView: View {
         .onChange(of: search) { state.selectedID = results.first?.id }
         .onKeyPress(.downArrow) { move(1); return .handled }
         .onKeyPress(.upArrow) { move(-1); return .handled }
-        .background {
-            Group {
-                Button("Find") { searchFocused = true }.keyboardShortcut("f")
-                Button("Copy selected") { if let selected { state.copy(selected) } }.keyboardShortcut("c")
-            }.hidden()
+        .onReceive(NotificationCenter.default.publisher(for: .historyMove)) { note in move(note.object as? Int ?? 0) }
+        .onReceive(NotificationCenter.default.publisher(for: .activateSelectedClip)) { _ in if let selected { state.activate(selected) } }
+        .onReceive(NotificationCenter.default.publisher(for: .copySelectedClip)) { _ in
+            if state.tab == "History", let selected { state.copy(selected) }
+            else if state.tab == "Emoji" { NotificationCenter.default.post(name: .emojiCopy, object: nil) }
         }
         .sheet(item: $detail) { item in ItemDetailView(state: state, item: item) }
         .confirmationDialog("Clear all clipboard history, including pinned items?", isPresented: $clearAll) {
@@ -74,7 +76,7 @@ struct LauncherView: View {
             Menu {
                 Button("Clear recent history") { state.clear(all: false) }
                 Button("Clear all history…", role: .destructive) { clearAll = true }
-            } label: { Image(systemName: "ellipsis.circle") }.menuStyle(.borderlessButton).frame(width: 20)
+            } label: { Image(systemName: "ellipsis.circle") }.menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 20)
         }.buttonStyle(.plain)
     }
     private var historyView: some View {
@@ -93,7 +95,7 @@ struct LauncherView: View {
                         if !group.isEmpty {
                             Text(pinned ? "PINNED" : "RECENT").font(.caption2.weight(.semibold)).tracking(1.4).foregroundStyle(.secondary).padding(.top, 8).padding(.leading, 10)
                             ForEach(group) { item in
-                                ClipRow(item: item, selected: selected?.id == item.id, pin: { state.pin(item) }, copy: { state.copy(item) })
+                                ClipRow(item: item, animations: state.preferences.animations, selected: selected?.id == item.id, pin: { state.pin(item) }, copy: { state.copy(item) })
                                     .contentShape(Rectangle())
                                     .onTapGesture { state.selectedID = item.id }
                                     .onTapGesture(count: 2) { state.activate(item) }
@@ -103,7 +105,7 @@ struct LauncherView: View {
                                         Button("Activate") { state.activate(item) }
                                         Button("Activate as plain text") { state.activate(item, plain: true) }
                                         Button(item.pinned ? "Unpin" : "Pin") { state.pin(item) }
-                                        Button("Transform with AI…") { state.selectedID = item.id; state.ai.input = item.text; state.ai.sourceID = item.id; state.ai.output = ""; state.tab = "AI" }.disabled(item.kind == .image)
+                                        Button("Transform with AI…") { state.ai.reset(); state.selectedID = item.id; state.ai.input = item.text; state.ai.sourceID = item.id; state.ai.output = ""; state.tab = "AI" }.disabled(item.kind == .image)
                                         Button("View full content / edit title") { detail = item }
                                         Divider()
                                         Button("Delete", role: .destructive) { state.delete(item) }
@@ -125,6 +127,8 @@ struct LauncherView: View {
 }
 struct ClipRow: View {
     let item: ClipItem
+    var animations = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let selected: Bool
     let pin: () -> Void
     let copy: () -> Void
@@ -151,6 +155,7 @@ struct ClipRow: View {
             }
         }.buttonStyle(.plain).padding(12)
         .background(selected ? Design.selection : hovered ? Color.primary.opacity(0.04) : .clear, in: RoundedRectangle(cornerRadius: Design.rowRadius))
+        .animation(animations && !reduceMotion ? .easeOut(duration: Design.hoverDuration) : nil, value: hovered)
         .onHover { hovered = $0 }
         .accessibilityElement(children: .contain)
     }
@@ -199,4 +204,11 @@ struct ItemDetailView: View {
             }
         }.padding(24).frame(width: 480, height: 440).onAppear { title = item.title ?? "" }
     }
+}
+
+extension Notification.Name {
+    static let historyMove = Notification.Name("ClipBro.historyMove")
+    static let activateSelectedClip = Notification.Name("ClipBro.activateSelectedClip")
+    static let copySelectedClip = Notification.Name("ClipBro.copySelectedClip")
+    static let emojiCopy = Notification.Name("ClipBro.emojiCopy")
 }
