@@ -7,6 +7,9 @@ final class PasteService {
     static func requestPermission() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
     }
     static func paste(to destination: NSRunningApplication?) async -> String? {
         guard permitted else { return "Copied. Enable Accessibility in Settings to paste automatically." }

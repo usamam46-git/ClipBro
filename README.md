@@ -60,3 +60,6 @@ Automatic paste needs **System Settings → Privacy & Security → Accessibility
 Cross-device synchronization and import/export are not implemented. Universal paste compatibility, App Store sandboxing, Developer ID signing and notarization are outside this local build.
 
 See [verification and manual acceptance](docs/testing.md), [progress](docs/progress.md), [architecture](docs/architecture.md), [security](docs/security.md), and the [bounded REA investigation](docs/rea-findings.md).
+
+### If opening ClipBro appears to do nothing
+The first launch now opens setup. Opening the running app again brings its panel or settings forward. You can also use ⌘⇧V or the menu-bar icon. In Settings → Shortcuts, **Set Up Automatic Paste…** requests Accessibility and opens its settings pane. If ClipBro is absent, use **+**, press **⇧⌘G**, and select `/Applications/ClipBro.app` (or the exact path shown by ClipBro). Enable its switch, then enable **Paste into the previous app** in ClipBro. Copy-only remains usable without permission.

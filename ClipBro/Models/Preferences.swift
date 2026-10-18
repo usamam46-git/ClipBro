@@ -5,7 +5,7 @@ struct Preferences: Codable, Equatable {
     var persistence = true
     var historyLimit = 20
     var pinLimit = 50
-    var showOnLaunch = false
+    var showOnLaunch = true
     var pasteOnActivate = false
     var skipSensitive = true
     var excludedApps = "com.1password.1password,com.agilebits.onepassword7,com.apple.keychainaccess"

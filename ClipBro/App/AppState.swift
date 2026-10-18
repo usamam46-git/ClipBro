@@ -26,6 +26,8 @@ final class AppState: ObservableObject {
     private let diskQueue = DispatchQueue(label: "com.usamam46.ClipBro.storage", qos: .utility)
     private var storageReadable = true
     var dismiss: () -> Void = {}
+    @Published var settingsTab = "General"
+    var showLauncher: () -> Void = {}
     var openSettings: () -> Void = {}
     var paste: () -> Void = {}
     var preferencesChanged: ((Preferences) -> Void)?

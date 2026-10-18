@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let hotkey = HotkeyService()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        state.showLauncher = { [weak self] in self?.settingsWindow?.orderOut(nil); self?.showPanel() }
         state.openSettings = { [weak self] in self?.showSettings() }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = MenuBarIcon.make()
@@ -98,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if ProcessInfo.processInfo.arguments.contains("--emoji") { state.tab = "Emoji" }
             if ProcessInfo.processInfo.arguments.contains("--ai") { state.tab = "AI" }
             showPanel()
+            if ProcessInfo.processInfo.arguments.contains("--settings") { state.settingsTab = "Shortcuts"; showSettings() }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self else { return }
                 if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.function, .numericPad], timestamp: 0, windowNumber: self.panel.windowNumber, context: nil, characters: "\u{F701}", charactersIgnoringModifiers: "\u{F701}", isARepeat: false, keyCode: 125) {
@@ -108,11 +110,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         state.monitor.start()
-        if state.preferences.showOnLaunch { showPanel() }
+        if !UserDefaults.standard.bool(forKey: "welcomeShown") {
+            state.settingsTab = "Shortcuts"
+            showSettings()
+            UserDefaults.standard.set(true, forKey: "welcomeShown")
+        } else if state.preferences.showOnLaunch { showPanel() }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if let settingsWindow, settingsWindow.isVisible {
+            NSApp.activate(ignoringOtherApps: true)
+            settingsWindow.makeKeyAndOrderFront(nil)
+        } else if panel != nil { showPanel() }
+        return false
     }
 
     private func finishSmokeTest() {
-        guard let view = panel.contentView else { NSApp.terminate(nil); return }
+        let renderedWindow: NSWindow = ProcessInfo.processInfo.arguments.contains("--settings") ? (settingsWindow ?? panel) : panel
+        guard let view = renderedWindow.contentView else { NSApp.terminate(nil); return }
         view.layoutSubtreeIfNeeded()
         if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
             view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -121,7 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
         let navigated = state.selectedID == state.history.items.dropFirst().first?.id
-        let report = "arrowNavigated=\(navigated)\npanelVisible=\(panel.isVisible)\npanelKey=\(panel.isKeyWindow)\naccessibilityTrusted=\(PasteService.permitted)\nhotkeyError=\(state.hotkeyError)\n"
+        let report = "settingsVisible=\(settingsWindow?.isVisible ?? false)\narrowNavigated=\(navigated)\npanelVisible=\(panel.isVisible)\npanelKey=\(panel.isKeyWindow)\naccessibilityTrusted=\(PasteService.permitted)\nhotkeyError=\(state.hotkeyError)\n"
         try? report.write(to: URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("build/ui-smoke.txt"), atomically: true, encoding: .utf8)
         NSApp.terminate(nil)
     }
@@ -162,6 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func showMenu() {
         let menu = NSMenu()
         menu.addItem(withTitle: "Open ClipBro", action: #selector(openPanel), keyEquivalent: "")
+        menu.addItem(withTitle: "Set Up Automatic Paste…", action: #selector(showPasteSetup), keyEquivalent: "")
         menu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
         menu.addItem(withTitle: state.preferences.monitoring ? "Pause Monitoring" : "Resume Monitoring", action: #selector(toggleMonitoring), keyEquivalent: "")
         menu.addItem(.separator())
@@ -174,10 +190,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func openPanel() { showPanel() }
     @objc private func toggleMonitoring() { state.preferences.monitoring.toggle() }
     @objc private func quit() { NSApp.terminate(nil) }
+    @objc private func showPasteSetup() { state.settingsTab = "Shortcuts"; showSettings() }
     @objc func showSettings() {
         hidePanel()
         if settingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 620), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 680), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
             window.title = "ClipBro Settings"
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: SettingsView(state: state))

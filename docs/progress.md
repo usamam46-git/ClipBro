@@ -25,3 +25,8 @@ See [testing.md](testing.md) for the acceptance ledger and remaining interactive
 
 ## Delivery
 All five feature milestones are committed and pushed to origin/main. Local build/ClipBro.app (about 1.7 MB), build/ClipBro.dmg and build/ClipBro.zip were generated and the app signature verified. The ordinary app was reopened for user permission setup. No release or repository-visibility change was made.
+
+## Startup and permission discovery fix
+The user reported that opening the app appeared to do nothing and ClipBro was absent from Accessibility. Process inspection initially found no running instance; a fresh launch stayed alive. The previous build defaulted to silent startup and did not handle Finder reopen events. The permission request was available only inside Shortcuts settings.
+Fixed: visible first-run setup window, panel-on-launch default for new preferences, Finder reopen handling, menu-bar paste-setup action, explicit Accessibility setup button, live permission status on app reactivation, current app path and Finder reveal with manual-add instructions. No permission is granted programmatically.
+Verification: Swift build exit 0; 32 core and 12 AI tests pass; settings smoke reports settingsVisible=true and the setup view was inspected. Cross-app paste remains unverified.

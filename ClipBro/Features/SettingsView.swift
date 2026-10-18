@@ -7,15 +7,27 @@ struct SettingsView: View {
     @State private var clearAll = false
     @State private var loginEnabled = SMAppService.mainApp.status == .enabled
     @State private var loginError = ""
+    @State private var accessibilityAllowed = PasteService.permitted
     var body: some View {
-        TabView {
-            general.tabItem { Label("General", systemImage: "gearshape") }
-            clipboard.tabItem { Label("Clipboard", systemImage: "clipboard") }
-            shortcuts.tabItem { Label("Shortcuts", systemImage: "keyboard") }
-            AISettingsView(state: state).tabItem { Label("AI", systemImage: "sparkles") }
-            privacy.tabItem { Label("Privacy", systemImage: "hand.raised") }
-        }.padding().frame(width: 620, height: 620).tint(Design.gold)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("ClipBro is running").font(.title2.weight(.semibold))
+                    Text("Open your clipboard with ⌘⇧V or the menu-bar clipboard icon.").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Open clipboard", action: state.showLauncher)
+            }.padding(.horizontal, 12)
+        TabView(selection: $state.settingsTab) {
+            general.tabItem { Label("General", systemImage: "gearshape") }.tag("General")
+            clipboard.tabItem { Label("Clipboard", systemImage: "clipboard") }.tag("Clipboard")
+            shortcuts.tabItem { Label("Shortcuts", systemImage: "keyboard") }.tag("Shortcuts")
+            AISettingsView(state: state).tabItem { Label("AI", systemImage: "sparkles") }.tag("AI")
+            privacy.tabItem { Label("Privacy", systemImage: "hand.raised") }.tag("Privacy")
+        }
+        }.padding().frame(width: 620, height: 680).tint(Design.gold)
         .preferredColorScheme(state.preferences.theme == "Dark" ? .dark : state.preferences.theme == "Light" ? .light : nil)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in accessibilityAllowed = PasteService.permitted }
         .confirmationDialog("Permanently clear all history, including pinned items?", isPresented: $clearAll) {
             Button("Clear All", role: .destructive) { state.clear(all: true) }
         }
@@ -71,7 +83,11 @@ struct SettingsView: View {
             Section("Activation") {
                 Toggle("Paste into the previous app on Enter / double-click", isOn: $state.preferences.pasteOnActivate)
                 Text("Copy-only is the default. ⌘C and row copy buttons always copy without pasting. Automatic paste needs Accessibility permission; some apps reject synthetic input.").font(.caption).foregroundStyle(.secondary)
-                Button("Enable Accessibility for automatic paste…") { PasteService.requestPermission() }
+                Label(accessibilityAllowed ? "Accessibility allowed" : "Accessibility permission not yet granted", systemImage: accessibilityAllowed ? "checkmark.circle.fill" : "lock.shield").font(.caption)
+                Button("Set Up Automatic Paste…") { PasteService.requestPermission() }
+                Text("In Accessibility, enable ClipBro. If it is missing, click +, then press ⇧⌘G and paste the app path below. Choose the app and enable its switch.").font(.caption).foregroundStyle(.secondary)
+                Text(Bundle.main.bundleURL.path).font(.caption2).textSelection(.enabled)
+                Button("Show this app in Finder") { NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL]) }
             }
         }.formStyle(.grouped)
     }
