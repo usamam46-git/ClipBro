@@ -58,10 +58,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self else { return }
             if old.hotkeyCode != self.state.preferences.hotkeyCode || old.hotkeyModifiers != self.state.preferences.hotkeyModifiers { self.registerHotkey() }
         }
+        if ProcessInfo.processInfo.arguments.contains("--ui-smoke-test") {
+            state.history.items = [
+                ClipItem(text: "SELECT name, created_at FROM projects ORDER BY created_at DESC;", kind: .sql, pinned: true, title: "Project activity query"),
+                ClipItem(text: "Thanks for the feedback. I’ll send the revised draft tomorrow.", kind: .text, title: "Client follow-up draft"),
+                ClipItem(text: "https://developer.apple.com/documentation/appkit", kind: .url),
+                ClipItem(text: "func greet() { print(\"Hello\") }", kind: .code),
+                ClipItem(text: "👩🏽‍💻 A good day to build something useful.", kind: .text)
+            ]
+            showPanel()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.finishSmokeTest() }
+            return
+        }
         state.monitor.start()
         if state.preferences.showOnLaunch { showPanel() }
     }
 
+    private func finishSmokeTest() {
+        guard let view = panel.contentView else { NSApp.terminate(nil); return }
+        view.layoutSubtreeIfNeeded()
+        if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            if let png = bitmap.representation(using: .png, properties: [:]) {
+                try? png.write(to: URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("build/ui-preview.png"))
+            }
+        }
+        let report = "panelVisible=\(panel.isVisible)\npanelKey=\(panel.isKeyWindow)\naccessibilityTrusted=\(PasteService.permitted)\nhotkeyError=\(state.hotkeyError)\n"
+        try? report.write(to: URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("build/ui-smoke.txt"), atomically: true, encoding: .utf8)
+        NSApp.terminate(nil)
+    }
     func applicationWillTerminate(_ notification: Notification) {
         state.monitor.stop(); state.flush(); hotkey.stop()
     }

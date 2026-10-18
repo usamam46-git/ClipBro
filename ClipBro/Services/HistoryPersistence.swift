@@ -8,8 +8,10 @@ struct HistoryPersistence {
     }
     func load() throws -> History {
         guard FileManager.default.fileExists(atPath: file.path) else { return History() }
+        let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= 128 * 1024 * 1024 else { throw StorageError.tooLarge }
         let data = try Data(contentsOf: file)
-        guard data.count <= 32 * 1024 * 1024 else { throw StorageError.tooLarge }
+        guard data.count <= 128 * 1024 * 1024 else { throw StorageError.tooLarge }
         let history = try JSONDecoder().decode(History.self, from: data)
         guard history.version == 1 else { throw StorageError.version }
         return history

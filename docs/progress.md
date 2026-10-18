@@ -12,3 +12,6 @@ All interactive features require separate manual validation; compilation is not 
 | Emoji | Implemented | App compile; Unicode core test | see history commit | pending | Curated subset, not full Unicode inventory |
 | History milestone push | Complete | git push exit 0; launched process remains running | eff621a | pushed | Launch is a smoke check, not interactive acceptance |
 | AI actions / Keychain | Implemented | App build exit 0; mocked HTTP checks | see AI commit | pending | Valid key, Keychain prompts and live API call require user testing |
+| AI milestone push | Complete | git push exit 0 | 5902084 | pushed | Live API call not attempted |
+| Images / files / RTF / OCR | Implemented | 32 core + 12 AI checks; 12 native integration checks passed | see media commit | pending | Bounded images, file references may become inaccessible; RTF only |
+| Panel runtime smoke | Passed | Synthetic NSPanel visible/key; hotkey registration no error; captured own-view rendering | see media commit | pending | Accessibility false; cross-app paste not tested |

@@ -45,6 +45,7 @@ struct SettingsView: View {
                 Toggle("Monitor clipboard", isOn: $state.preferences.monitoring)
                 Toggle("Keep history across restarts", isOn: $state.preferences.persistence)
                 Stepper("Recent items: \(state.preferences.historyLimit)", value: $state.preferences.historyLimit, in: 1...200)
+                Stepper("Image storage: \(state.preferences.imageLimitMB) MB", value: $state.preferences.imageLimitMB, in: 1...50)
                 Stepper("Pinned items: \(state.preferences.pinLimit)", value: $state.preferences.pinLimit, in: 1...200)
                 Text("Duplicates move to the top while keeping their title and pin. Existing pins are retained if the pin limit is lowered.").font(.caption).foregroundStyle(.secondary)
                 Button("Clear recent items") { state.clear(all: false) }

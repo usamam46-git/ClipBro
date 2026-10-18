@@ -55,6 +55,23 @@ import Foundation
         prefs.historyLimit = 31
         prefs.save(to: defaults)
         check(Preferences.load(from: defaults).historyLimit == 31, "configuration persistence")
+        check(Set(Emoji.all.map(\.symbol)).count == Emoji.all.count, "emoji identifiers unique")
+        check(Emoji.all.contains { $0.symbol == "👩🏽‍💻" && $0.matches("developer") == false && $0.matches("technologist") }, "multicodepoint emoji searchable")
+        var mediaHistory = History()
+        let media = ClipItem(text: "Synthetic image fixture", kind: .image, imageData: Data(repeating: 7, count: 100))
+        mediaHistory.insert(media, limit: 20)
+        check(mediaHistory.enforceStorage(imageLimit: 50) && mediaHistory.items.isEmpty, "image storage cap eviction")
+        var pinMedia = media; pinMedia.pinned = true
+        mediaHistory.insert(pinMedia, limit: 20)
+        check(!mediaHistory.enforceStorage(imageLimit: 50) && mediaHistory.items.count == 1, "storage cap preserves pins")
+        var rich = ClipItem(text: "rich fixture", kind: .text)
+        rich.richText = Data("{synthetic}".utf8)
+        rich.fileURLs = ["file:///tmp/fixture"]
+        mediaHistory.insert(rich, limit: 20)
+        try persistence.save(mediaHistory)
+        let mediaRestored = try persistence.load()
+        check(mediaRestored.items == mediaHistory.items, "rich binary and file reference persistence")
+        check(!MediaService.validImage(Data("invalid".utf8)), "invalid image rejected")
         print("\(count) checks passed")
     }
 }

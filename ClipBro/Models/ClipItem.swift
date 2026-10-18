@@ -29,9 +29,13 @@ struct ClipItem: Identifiable, Codable, Equatable {
     var sourceBundle: String?
     var assetName: String?
     var richText: Data?
+    var imageData: Data?
+    var imageType: String?
+    var fileURLs: [String]?
     var generated = false
     var preview: String { title?.isEmpty == false ? title! : String(text.prefix(220)).replacingOccurrences(of: "\n", with: "  ") }
     var fingerprint: String {
+        if let imageData { return SHA256.hash(data: imageData).map { String(format: "%02x", $0) }.joined() }
         let normalized = text.precomposedStringWithCanonicalMapping.replacingOccurrences(of: "\r\n", with: "\n")
         let bytes = Data((kind.rawValue + "\u{0}" + (assetName ?? normalized)).utf8)
         return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
@@ -92,6 +96,15 @@ struct History: Codable {
         // An unpinned item becomes most recent, so the action never immediately loses it.
         items.insert(item, at: 0)
         enforceLimit(historyLimit)
+        return true
+    }
+    var imageBytes: Int { items.reduce(0) { $0 + ($1.imageData?.count ?? 0) } }
+    var totalBytes: Int { items.reduce(0) { $0 + $1.text.utf8.count + ($1.imageData?.count ?? 0) + ($1.richText?.count ?? 0) } }
+    mutating func enforceStorage(imageLimit: Int, totalLimit: Int = 64 * 1024 * 1024) -> Bool {
+        while imageBytes > imageLimit || totalBytes > totalLimit {
+            guard let index = items.lastIndex(where: { !$0.pinned && (imageBytes <= imageLimit || $0.imageData != nil) }) else { return false }
+            items.remove(at: index)
+        }
         return true
     }
     var ordered: [ClipItem] { items.filter(\.pinned) + items.filter { !$0.pinned } }

@@ -39,15 +39,36 @@ final class ClipboardMonitor {
     func stop() { timer?.invalidate(); timer = nil }
     func ignoreCurrent() { gate.ignore(pasteboard.changeCount) }
     func poll() {
-        guard gate.changed(pasteboard.changeCount) else { return }
+        let observedCount = pasteboard.changeCount
+        guard gate.changed(observedCount) else { return }
         let prefs = preferences()
         guard prefs.monitoring, !PrivacyFilter.shouldIgnore(types: pasteboard.typeNames) else { return }
         let app = NSWorkspace.shared.frontmostApplication
         let excluded = prefs.excludedApps.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         guard !excluded.contains(app?.bundleIdentifier ?? "") else { return }
-        guard let text = pasteboard.readText(), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.utf8.count <= 1_000_000 else { return }
-        guard !prefs.skipSensitive || !PrivacyFilter.likelySecret(text) else { return }
-        var item = ClipItem(text: text, kind: Classifier.classify(text))
+        var item: ClipItem
+        if let files = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !files.isEmpty {
+            let urls = Array(files.prefix(100))
+            item = ClipItem(text: urls.map(\.path).joined(separator: "\n"), kind: .file)
+            item.fileURLs = urls.map(\.absoluteString)
+        } else if let text = pasteboard.readText(), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            guard text.utf8.count <= 1_000_000, !prefs.skipSensitive || !PrivacyFilter.likelySecret(text) else { return }
+            item = ClipItem(text: text, kind: Classifier.classify(text))
+            if let rtf = pasteboard.data(forType: .rtf), rtf.count <= 2_000_000 { item.richText = rtf }
+        } else if let data = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff), MediaService.validImage(data) {
+            item = ClipItem(text: "Copied image", kind: .image)
+            item.imageData = data
+            item.imageType = pasteboard.availableType(from: [.png, .tiff])?.rawValue
+        } else if let rtf = pasteboard.data(forType: .rtf), rtf.count <= 2_000_000,
+                  let attributed = try? NSAttributedString(data: rtf, options: [.documentType: NSAttributedString.DocumentType.rtf], documentAttributes: nil) {
+            let text = attributed.string
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.utf8.count <= 1_000_000,
+                  !prefs.skipSensitive || !PrivacyFilter.likelySecret(text) else { return }
+            item = ClipItem(text: text, kind: Classifier.classify(text))
+            item.richText = rtf
+        } else { return }
+        // Do not combine metadata and data from different clipboard generations.
+        guard pasteboard.changeCount == observedCount else { return }
         item.sourceApp = app?.localizedName
         item.sourceBundle = app?.bundleIdentifier
         receive?(item)

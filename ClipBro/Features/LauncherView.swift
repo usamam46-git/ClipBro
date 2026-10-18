@@ -101,8 +101,9 @@ struct LauncherView: View {
                                         Button("Copy") { state.copy(item) }
                                         Button("Copy as plain text") { state.copy(item, plain: true) }
                                         Button("Activate") { state.activate(item) }
+                                        Button("Activate as plain text") { state.activate(item, plain: true) }
                                         Button(item.pinned ? "Unpin" : "Pin") { state.pin(item) }
-                                        Button("Transform with AI…") { state.selectedID = item.id; state.ai.input = item.text; state.ai.sourceID = item.id; state.tab = "AI" }
+                                        Button("Transform with AI…") { state.selectedID = item.id; state.ai.input = item.text; state.ai.sourceID = item.id; state.ai.output = ""; state.tab = "AI" }.disabled(item.kind == .image)
                                         Button("View full content / edit title") { detail = item }
                                         Divider()
                                         Button("Delete", role: .destructive) { state.delete(item) }
@@ -130,7 +131,11 @@ struct ClipRow: View {
     @State private var hovered = false
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: item.kind.symbol).font(.system(size: 17)).foregroundStyle(Design.gold).frame(width: 28)
+            if item.kind == .image, let thumbnail = MediaService.thumbnail(item) {
+                Image(nsImage: thumbnail).resizable().scaledToFit().frame(width: 36, height: 36).clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                Image(systemName: item.kind.symbol).font(.system(size: 17)).foregroundStyle(Design.gold).frame(width: 28)
+            }
             VStack(alignment: .leading, spacing: 5) {
                 Text(item.preview).font(.system(size: 13, weight: .medium)).lineLimit(2)
                 HStack(spacing: 6) {
@@ -154,13 +159,39 @@ struct ItemDetailView: View {
     @ObservedObject var state: AppState
     let item: ClipItem
     @State private var title = ""
+    @State private var extracted = ""
+    @State private var extracting = false
+    @State private var ocrError = ""
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Clip details").font(.title2)
             TextField("Optional title", text: $title).textFieldStyle(.roundedBorder)
             Text("\(item.kind.rawValue) · \(item.createdAt.formatted())").font(.caption).foregroundStyle(.secondary)
-            ScrollView { Text(item.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let image = MediaService.thumbnail(item) { Image(nsImage: image).resizable().scaledToFit().frame(maxHeight: 180) }
+                    Text(item.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                    if let data = item.imageData {
+                        HStack {
+                            Button("Extract Text · on this Mac") {
+                                extracting = true; ocrError = ""
+                                Task {
+                                    do { extracted = try await MediaService.extractText(data); if extracted.isEmpty { ocrError = "No readable text found." } }
+                                    catch { ocrError = "Text recognition failed for this image." }
+                                    extracting = false
+                                }
+                            }.disabled(extracting)
+                            if extracting { ProgressView().controlSize(.small) }
+                        }
+                    }
+                    if !ocrError.isEmpty { Text(ocrError).font(.caption).foregroundStyle(.secondary) }
+                    if !extracted.isEmpty {
+                        Text(extracted).textSelection(.enabled)
+                        Button("Save extracted text") { state.add(ClipItem(text: extracted, kind: Classifier.classify(extracted))); state.message = "Extracted text saved."; dismiss() }
+                    }
+                }
+            }
             HStack {
                 Button("Copy") { state.copy(item) }
                 Spacer()

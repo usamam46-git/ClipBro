@@ -7,6 +7,7 @@ final class AppState: ObservableObject {
         didSet {
             preferences.save()
             history.enforceLimit(preferences.historyLimit)
+            _ = history.enforceStorage(imageLimit: preferences.imageLimitMB * 1024 * 1024)
             persist()
             preferencesChanged?(oldValue)
         }
@@ -27,6 +28,7 @@ final class AppState: ObservableObject {
     var paste: () -> Void = {}
     var preferencesChanged: ((Preferences) -> Void)?
     init() {
+        if ProcessInfo.processInfo.arguments.contains("--ui-smoke-test") { return }
         tab = preferences.defaultTab
         if preferences.persistence {
             do { history = try persistence.load(); history.enforceLimit(preferences.historyLimit) }
@@ -36,11 +38,21 @@ final class AppState: ObservableObject {
         monitor.receive = { [weak self] in self?.add($0) }
     }
     func add(_ item: ClipItem) {
+        let before = history
         history.insert(item, limit: preferences.historyLimit)
+        if !history.enforceStorage(imageLimit: preferences.imageLimitMB * 1024 * 1024) {
+            history = before
+            message = "Storage cap reached by pinned clips. Remove some clips to capture more."
+            return
+        }
+        if !history.items.contains(where: { $0.fingerprint == item.fingerprint }) {
+            message = "Clip exceeds your storage limit."
+        }
         if selectedID == nil { selectedID = item.id }
         persist()
     }
     func persist() {
+        guard !ProcessInfo.processInfo.arguments.contains("--ui-smoke-test") else { return }
         guard storageReadable else { return }
         let snapshot = history
         let enabled = preferences.persistence
@@ -57,10 +69,10 @@ final class AppState: ObservableObject {
         }
         persist()
     }
-    func delete(_ item: ClipItem) { history.items.removeAll { $0.id == item.id }; persist() }
+    func delete(_ item: ClipItem) { history.items.removeAll { $0.id == item.id }; MediaService.purgeThumbnails(); persist() }
     func clear(all: Bool) {
         if all { history.items.removeAll(); storageReadable = true } else { history.items.removeAll { !$0.pinned } }
-        selectedID = nil; persist()
+        selectedID = nil; MediaService.purgeThumbnails(); ai.reset(); persist()
     }
     func title(_ id: UUID, value: String) {
         guard let index = history.items.firstIndex(where: { $0.id == id }) else { return }
@@ -68,8 +80,24 @@ final class AppState: ObservableObject {
     }
     func copy(_ item: ClipItem, plain: Bool = false, activate: Bool = false) {
         let board = NSPasteboard.general
-        board.clearContents()
-        guard board.setString(item.text, forType: .string) else { message = "Clipboard write failed."; return }
+        var success = false
+        if item.kind == .file && !plain, let paths = item.fileURLs {
+            let urls = paths.compactMap(URL.init(string:))
+            guard !urls.isEmpty, urls.allSatisfy({ FileManager.default.isReadableFile(atPath: $0.path) }) else {
+                message = "A referenced file is missing or inaccessible. Copy as plain text to copy its path."; return
+            }
+            board.clearContents()
+            success = board.writeObjects(urls as [NSURL])
+        } else if item.kind == .image, let data = item.imageData, let type = item.imageType {
+            guard !plain else { message = "Use Extract Text on this image first."; return }
+            board.clearContents()
+            success = board.setData(data, forType: NSPasteboard.PasteboardType(type))
+        } else {
+            board.clearContents()
+            success = board.setString(item.text, forType: .string)
+            if !plain, let rtf = item.richText { _ = board.setData(rtf, forType: .rtf) }
+        }
+        guard success else { message = "Clipboard write failed."; return }
         monitor.ignoreCurrent()
         var recent = item; recent.lastCopiedAt = Date()
         history.insert(recent, limit: preferences.historyLimit); persist()
