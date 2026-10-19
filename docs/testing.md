@@ -31,3 +31,6 @@ The app launched and remained running. A real panel became visible/key and the g
 
 ## Suggested interactive check
 Copy harmless fixture text in TextEdit, Chrome and VS Code. Press ⌘⇧V, search a word, use arrows, press ⌘C, and paste manually. Then enable automatic paste and explicitly grant Accessibility in Settings. Repeat from two apps and inspect actual inserted text; secure inputs may reject synthetic events. Try Notes as an additional target. Verify light/dark mode, Escape/outside dismissal, pins, emoji favorites and full-content sheets. Enter your API key only in ClipBro Settings and test a harmless rewrite.
+
+## Launcher regression harness
+Quit the ordinary app, then run `build/ClipBro.app/Contents/MacOS/ClipBro --ui-smoke-test --launcher-events` from the repository root with desktop-service access. This uses synthetic memory-only history, invokes the actual status button action, dispatches an EventHotKeyPressed event through the registered Carbon handler, and checks opening, closing, focus-transition retention, Escape, and Finder reopen. Results are in ignored build/launcher-events.txt. All seven checks passed after the activation repair. Physical global keyboard delivery remains a separate manual check.

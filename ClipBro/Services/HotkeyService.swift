@@ -1,4 +1,5 @@
 import Carbon
+import Foundation
 
 @MainActor
 final class HotkeyService {
@@ -25,6 +26,18 @@ final class HotkeyService {
         reference = next
         registeredCode = code; registeredModifiers = modifiers
         return true
+    }
+    // Used only by the isolated --ui-smoke-test --launcher-events harness.
+    // Dispatches through Carbon's registered event handler, without synthesizing
+    // global keystrokes or requiring Accessibility.
+    func dispatchTestEvent() {
+        guard ProcessInfo.processInfo.arguments.contains("--ui-smoke-test") else { return }
+        var event: EventRef?
+        guard CreateEvent(nil, OSType(kEventClassKeyboard), UInt32(kEventHotKeyPressed), 0, 0, &event) == noErr, let event else { return }
+        defer { ReleaseEvent(event) }
+        var identity = EventHotKeyID(signature: 0x4342524F, id: 1)
+        SetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), MemoryLayout<EventHotKeyID>.size, &identity)
+        SendEventToEventTarget(event, GetApplicationEventTarget())
     }
     func stop() {
         if let reference { UnregisterEventHotKey(reference) }

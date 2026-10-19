@@ -11,7 +11,7 @@
 Reference appearance/dismissal, focus/keyboard navigation, destination workflow, search/selection and window positioning are all unresolved. No runtime interaction, decompilation or function/module findings were obtained. There are no REA Evidence IDs to cite.
 
 ## Chosen independent adaptations
-Use AppKit NSPanel, nonactivating key-panel behavior, Escape/outside dismissal, a captured destination NSRunningApplication, pointer-display visibleFrame centering, and a Carbon global hotkey. These are design choices using Apple APIs, not reverse-engineered findings.
+Use AppKit NSPanel, explicit activation/key-panel behavior, Escape/application-deactivation dismissal, a captured destination NSRunningApplication, pointer-display visibleFrame centering, and a Carbon global hotkey. These are design choices using Apple APIs, not reverse-engineered findings.
 
 ## Limitation and next step
 REA setup/reconnection would be required for MCP investigation. As allowed by the task, proceed with native implementation rather than change Codex configuration or interrupt the session. A later investigation can inspect a selected installed reference after registration is repaired. No REA code/assets/dependencies are shipped.

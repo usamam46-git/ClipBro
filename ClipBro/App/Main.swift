@@ -19,7 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem!
     private var panel: LauncherPanel!
     private var settingsWindow: NSWindow?
-    private var outsideMonitor: Any?
     private var keyboardMonitor: Any?
     private var previousApplication: NSRunningApplication?
     let state = AppState()
@@ -33,13 +32,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        panel = LauncherPanel(contentRect: NSRect(x: 0, y: 0, width: Design.panelWidth, height: Design.panelHeight), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel = LauncherPanel(contentRect: NSRect(x: 0, y: 0, width: Design.panelWidth, height: Design.panelHeight), styleMask: [.borderless], backing: .buffered, defer: false)
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        panel.hidesOnDeactivate = true
+        panel.hidesOnDeactivate = false
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.delegate = self
         panel.contentView = NSHostingView(rootView: LauncherView(state: state))
@@ -56,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
             }
         }
-        hotkey.action = { [weak self] in self?.togglePanel() }
+        hotkey.action = { [weak self] in self?.requestTogglePanel() }
         registerHotkey()
         state.preferencesChanged = { [weak self] old in
             guard let self else { return }
@@ -98,6 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             state.selectedID = state.history.items.first?.id
             if ProcessInfo.processInfo.arguments.contains("--emoji") { state.tab = "Emoji" }
             if ProcessInfo.processInfo.arguments.contains("--ai") { state.tab = "AI" }
+            if ProcessInfo.processInfo.arguments.contains("--launcher-events") {
+                runLauncherEventTest()
+                return
+            }
             showPanel()
             if ProcessInfo.processInfo.arguments.contains("--settings") { state.settingsTab = "Shortcuts"; showSettings() }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
@@ -125,6 +130,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return false
     }
 
+    private func runLauncherEventTest() {
+        var results: [String] = []
+        func record(_ label: String, _ condition: Bool) { results.append("\(label)=\(condition)") }
+        hidePanel()
+        statusItem.button?.performClick(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+            record("menuActionVisible", panel.isVisible && panel.isKeyWindow && NSApp.isActive)
+            hotkey.dispatchTestEvent()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+                record("hotkeyCloses", !panel.isVisible)
+                hotkey.dispatchTestEvent()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+                    record("hotkeyOpens", panel.isVisible && panel.isKeyWindow)
+                    record("hotkeyRegistered", state.hotkeyError.isEmpty)
+                    panel.resignKey()
+                    panel.makeKey()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [self] in
+                        record("transientFocusRetained", panel.isVisible)
+                        panel.cancelOperation(nil)
+                        record("escapeDismisses", !panel.isVisible)
+                        _ = applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+                            record("reopenVisible", panel.isVisible && panel.isKeyWindow)
+                            try? results.joined(separator: "\n").write(toFile: FileManager.default.currentDirectoryPath + "/build/launcher-events.txt", atomically: true, encoding: .utf8)
+                            NSApp.terminate(nil)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private func finishSmokeTest() {
         let renderedWindow: NSWindow = ProcessInfo.processInfo.arguments.contains("--settings") ? (settingsWindow ?? panel) : panel
         guard let view = renderedWindow.contentView else { NSApp.terminate(nil); return }
@@ -149,11 +186,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc private func statusClicked() {
         if NSApp.currentEvent?.type == .rightMouseUp { showMenu() }
-        else { togglePanel() }
+        else { requestTogglePanel() }
     }
-    func togglePanel() { panel.isVisible ? hidePanel() : showPanel() }
+    private func requestTogglePanel() {
+        // Present after status-item tracking / Carbon dispatch finishes, so their
+        // focus transitions cannot undo the window's activation.
+        DispatchQueue.main.async { [weak self] in self?.togglePanel() }
+    }
+    func togglePanel() { panel.isVisible && panel.isKeyWindow ? hidePanel() : showPanel() }
     func showPanel() {
-        if panel.isVisible { return }
         if NSWorkspace.shared.frontmostApplication?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
             previousApplication = NSWorkspace.shared.frontmostApplication
         }
@@ -161,18 +202,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let rect = screen?.visibleFrame {
             panel.setFrameOrigin(NSPoint(x: rect.midX - panel.frame.width / 2, y: max(rect.minY, rect.midY - panel.frame.height / 2)))
         }
+        settingsWindow?.orderOut(nil)
+        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
         state.focusSearch = UUID()
-        outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            Task { @MainActor in self?.hidePanel() }
-        }
     }
-    func hidePanel() {
-        panel.orderOut(nil)
-        if let monitor = outsideMonitor { NSEvent.removeMonitor(monitor); outsideMonitor = nil }
+    func hidePanel() { panel?.orderOut(nil) }
+    func applicationDidResignActive(_ notification: Notification) {
+        if panel?.attachedSheet == nil { hidePanel() }
     }
     func windowDidResignKey(_ notification: Notification) {
-        if notification.object as? NSWindow === panel, panel.attachedSheet == nil { hidePanel() }
+        guard notification.object as? NSWindow === panel else { return }
+        // Wait until a new key window has been assigned. Sheet/menu focus changes
+        // inside ClipBro are not outside-app dismissal events.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !NSApp.isActive, self.panel.attachedSheet == nil else { return }
+            self.hidePanel()
+        }
     }
     private func showMenu() {
         let menu = NSMenu()
@@ -187,7 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem.button?.performClick(nil)
         statusItem.menu = nil
     }
-    @objc private func openPanel() { showPanel() }
+    @objc private func openPanel() { DispatchQueue.main.async { [weak self] in self?.showPanel() } }
     @objc private func toggleMonitoring() { state.preferences.monitoring.toggle() }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func showPasteSetup() { state.settingsTab = "Shortcuts"; showSettings() }
